@@ -3,7 +3,7 @@ name = "attendance-ai-environment"
 version = "0.1.0"
 description = "AI-powered attendance validation environment"
 authors = [
-    {name = "Vaishnavi Khandelwal"}
+    { name = "Vaishnavi Khandelwal" }
 ]
 dependencies = [
     "fastapi",
@@ -13,7 +13,6 @@ dependencies = [
     "openenv>=0.2.0"
 ]
 
-# 🔥 REQUIRED FIX
 [project.scripts]
 server = "server.app:app"
 
