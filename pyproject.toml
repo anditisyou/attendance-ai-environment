@@ -1,0 +1,17 @@
+[project]
+name = "attendance-ai-environment"
+version = "0.1.0"
+description = "AI-powered attendance validation environment with fraud detection and reward shaping"
+authors = [
+    {name = "Vaishnavi Khandelwal"}
+]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "numpy",
+    "plotly"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
