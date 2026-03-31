@@ -1,7 +1,7 @@
 [project]
 name = "attendance-ai-environment"
 version = "0.1.0"
-description = "AI-powered attendance validation environment with fraud detection and reward shaping"
+description = "AI-powered attendance validation environment"
 authors = [
     {name = "Vaishnavi Khandelwal"}
 ]
@@ -9,8 +9,13 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "numpy",
-    "plotly"
+    "plotly",
+    "openenv>=0.2.0"
 ]
+
+# 🔥 REQUIRED FIX
+[project.scripts]
+server = "server.app:app"
 
 [build-system]
 requires = ["setuptools"]
