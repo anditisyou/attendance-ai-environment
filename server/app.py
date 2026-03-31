@@ -1,6 +1,9 @@
 from attendance_env import AttendanceEnv
 
-env = AttendanceEnv()
-
-def app():
+def main():
+    env = AttendanceEnv()
     return env
+
+
+if __name__ == "__main__":
+    main()
