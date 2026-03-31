@@ -1,0 +1,34 @@
+name: attendance-env
+
+description: >
+  AI-powered attendance validation environment with fraud detection,
+  uncertainty handling, and reward shaping.
+
+version: 1.0
+
+# ✅ IMPORTANT FIX
+entrypoint: app.py
+
+tasks:
+  - name: easy
+    description: Valid student in classroom
+  - name: medium
+    description: Minor inconsistencies
+  - name: hard
+    description: Fraud and ambiguous scenarios
+
+action_space:
+  type: discrete
+  values:
+    - mark_present
+    - mark_absent
+    - flag_suspicious
+
+observation_space:
+  type: dict
+  fields:
+    name: string
+    location: string
+    time: string
+
+reward_range: [-1.0, 1.5]
