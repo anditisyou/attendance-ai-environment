@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from attendance_env import AttendanceEnv, Action
+import uvicorn
 
 app = FastAPI()
-
 env = AttendanceEnv()
 
 
@@ -43,3 +43,13 @@ def step(action: int):
         "done": done,
         "info": info
     }
+
+
+# 🔥 REQUIRED ENTRY POINT
+def main():
+    uvicorn.run(app, host="0.0.0.0", port=7860)
+
+
+# 🔥 REQUIRED FOR VALIDATOR
+if __name__ == "__main__":
+    main()
