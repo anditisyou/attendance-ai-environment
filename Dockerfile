@@ -1,4 +1,4 @@
-FROM python:3.9
+FROM ghcr.io/astral-sh/uv:python3.10-bookworm
 
 WORKDIR /app
 
