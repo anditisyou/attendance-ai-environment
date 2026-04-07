@@ -424,7 +424,11 @@ class AttendanceEnv:
     
     def step(self, action: int) -> Tuple[Dict, float, bool, Dict]:
         """Execute step with enhanced logging"""
-        action_enum = Action(action)
+        try:
+            action_enum = Action(action)
+        except Exception as e:
+            print("Invalid action received:", action, e)
+            action_enum = Action.FLAG_SUSPICIOUS  # safe fallback
         ground_truth = self._get_hidden_truth()
         
         # Calculate reward
