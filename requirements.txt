@@ -5,3 +5,4 @@ numpy==1.26.4
 plotly==5.20.0
 pandas==2.2.2
 openenv==0.1.13
+openai==1.30.0
