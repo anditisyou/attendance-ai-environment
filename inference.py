@@ -1,9 +1,8 @@
 import os
 from attendance_env import AttendanceEnv, Action
 
-# ✅ Required env variables (even if unused)
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost")
-MODEL_NAME = os.getenv("MODEL_NAME", "baseline-model")
+MODEL_NAME = os.getenv("MODEL_NAME", "optimized-agent")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 
@@ -13,20 +12,36 @@ def get_action(state):
         ambiguity = state.get("ambiguity", 0)
         fraud_signal = state.get("fraud_signal", False)
         student_id = state.get("student_id", "").lower()
+        confidence = state.get("confidence", 1.0)
 
-        if fraud_signal or ambiguity > 0.6:
+        # 🔥 1. FRAUD DETECTION (TOP PRIORITY)
+        if fraud_signal:
             return Action.FLAG_SUSPICIOUS.value
 
-        if "corridor" in location or "unknown" in student_id:
+        if "unknown" in student_id:
             return Action.FLAG_SUSPICIOUS.value
 
+        if "corridor" in location:
+            return Action.FLAG_SUSPICIOUS.value
+
+        # 🔥 2. HIGH AMBIGUITY → PLAY SAFE
+        if ambiguity > 0.6:
+            return Action.FLAG_SUSPICIOUS.value
+
+        # ⚠️ 3. MEDIUM AMBIGUITY → CAUTIOUS
+        if 0.3 < ambiguity <= 0.6:
+            return Action.FLAG_SUSPICIOUS.value
+
+        # ❌ 4. INVALID LOCATION
         if "classroom" not in location and "lab" not in location:
             return Action.MARK_ABSENT.value
 
-        if ambiguity < 0.2:
-            return Action.MARK_PRESENT.value
+        # ⚠️ 5. LOW CONFIDENCE → SUSPICIOUS
+        if confidence < 0.5:
+            return Action.FLAG_SUSPICIOUS.value
 
-        return Action.FLAG_SUSPICIOUS.value
+        # ✅ 6. CLEAN CASE → PRESENT
+        return Action.MARK_PRESENT.value
 
     except Exception as e:
         print("ERROR in agent:", e)
@@ -34,12 +49,12 @@ def get_action(state):
 
 
 def run():
-    print("START")  # ✅ REQUIRED FORMAT
+    print("START")
 
     env = AttendanceEnv()
 
     for difficulty in ["easy", "medium", "hard"]:
-        print(f"STEP difficulty={difficulty}")  # ✅ REQUIRED FORMAT
+        print(f"STEP difficulty={difficulty}")
 
         try:
             state = env.reset(difficulty)
@@ -54,7 +69,7 @@ def run():
         except Exception as e:
             print("ERROR:", e)
 
-    print("END")  # ✅ REQUIRED FORMAT
+    print("END")
 
 
 if __name__ == "__main__":
