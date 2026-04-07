@@ -14,62 +14,51 @@ def get_action(state):
         student_id = state.get("student_id", "").lower()
         confidence = state.get("confidence", 1.0)
 
-        # 🔥 1. FRAUD DETECTION (TOP PRIORITY)
-        if fraud_signal:
+        if fraud_signal or ambiguity > 0.6:
             return Action.FLAG_SUSPICIOUS.value
 
-        if "unknown" in student_id:
+        if "unknown" in student_id or "corridor" in location:
             return Action.FLAG_SUSPICIOUS.value
 
-        if "corridor" in location:
-            return Action.FLAG_SUSPICIOUS.value
-
-        # 🔥 2. HIGH AMBIGUITY → PLAY SAFE
-        if ambiguity > 0.6:
-            return Action.FLAG_SUSPICIOUS.value
-
-        # ⚠️ 3. MEDIUM AMBIGUITY → CAUTIOUS
-        if 0.3 < ambiguity <= 0.6:
-            return Action.FLAG_SUSPICIOUS.value
-
-        # ❌ 4. INVALID LOCATION
         if "classroom" not in location and "lab" not in location:
             return Action.MARK_ABSENT.value
 
-        # ⚠️ 5. LOW CONFIDENCE → SUSPICIOUS
         if confidence < 0.5:
             return Action.FLAG_SUSPICIOUS.value
 
-        # ✅ 6. CLEAN CASE → PRESENT
         return Action.MARK_PRESENT.value
 
     except Exception as e:
-        print("ERROR in agent:", e)
+        print(f"[ERROR] {e}", flush=True)
         return Action.FLAG_SUSPICIOUS.value
 
 
 def run():
-    print("START")
-
     env = AttendanceEnv()
 
-    for difficulty in ["easy", "medium", "hard"]:
-        print(f"STEP difficulty={difficulty}")
+    total_reward = 0
+    steps = 0
 
+    print("[START] task=attendance_validation", flush=True)
+
+    for i, difficulty in enumerate(["easy", "medium", "hard"], start=1):
         try:
             state = env.reset(difficulty)
             action = int(get_action(state))
 
             _, reward, _, info = env.step(action)
 
-            print(f"ACTION {action}")
-            print(f"REWARD {reward}")
-            print(f"CORRECT {info.get('ground_truth')}")
+            total_reward += reward
+            steps += 1
+
+            print(f"[STEP] step={i} difficulty={difficulty} reward={reward}", flush=True)
 
         except Exception as e:
-            print("ERROR:", e)
+            print(f"[STEP] step={i} error={e}", flush=True)
 
-    print("END")
+    score = total_reward / steps if steps > 0 else 0
+
+    print(f"[END] task=attendance_validation score={score} steps={steps}", flush=True)
 
 
 if __name__ == "__main__":
