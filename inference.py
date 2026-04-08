@@ -2,16 +2,13 @@ import os
 from attendance_env import AttendanceEnv, Action
 from openai import OpenAI
 
-# ✅ ENV VARIABLES
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost")
-MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-3.5-turbo")
-HF_TOKEN = os.getenv("HF_TOKEN")
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
-
+# ✅ Use the provided environment variables (DO NOT hardcode)
+API_BASE_URL = os.getenv("API_BASE_URL")  # NO default - must come from validator
+MODEL_NAME = os.getenv("MODEL_NAME")      # NO default - must come from validator
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")  # Use HF_TOKEN or API_KEY
 
 def log_start():
     print(f"[START] task=attendance env=attendance_env model={MODEL_NAME}", flush=True)
-
 
 def log_step(step, action, reward, done, error):
     error_val = error if error else "null"
@@ -21,7 +18,6 @@ def log_step(step, action, reward, done, error):
         flush=True
     )
 
-
 def log_end(success, steps, score, rewards):
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
@@ -29,66 +25,98 @@ def log_end(success, steps, score, rewards):
         flush=True
     )
 
+def get_llm_action(state, client):
+    """Call the LLM to decide the action"""
+    
+    # Build prompt from state
+    location = state.get("location", "unknown")
+    ambiguity = state.get("ambiguity", 0)
+    fraud_signal = state.get("fraud_signal", False)
+    student_id = state.get("student_id", "unknown")
+    
+    prompt = f"""You are an attendance monitoring system. Based on the following state, decide the appropriate action.
 
-def ping_llm():
+State:
+- Student ID: {student_id}
+- Location: {location}
+- Ambiguity score: {ambiguity}
+- Fraud signal: {fraud_signal}
+
+Available actions:
+- 0: MARK_PRESENT (student is present)
+- 1: MARK_ABSENT (student is absent)
+- 2: FLAG_SUSPICIOUS (suspicious activity detected)
+
+Rules:
+- If fraud_signal is True or ambiguity > 0.6, use FLAG_SUSPICIOUS
+- If location is not classroom or lab, use MARK_ABSENT
+- Otherwise use MARK_PRESENT
+
+Respond with ONLY the action number (0, 1, or 2)."""
+
     try:
-        api_key = os.environ.get("HF_TOKEN") or os.environ.get("API_KEY")
-        base_url = os.environ.get("API_BASE_URL")
-
-        client = OpenAI(
-            api_key=api_key,
-            base_url=base_url
-        )
-
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": "You are a test agent."},
-                {"role": "user", "content": "Say hello clearly"}
+                {"role": "system", "content": "You are an attendance monitoring assistant. Reply only with the action number."},
+                {"role": "user", "content": prompt}
             ],
-            max_tokens=10
+            max_tokens=10,
+            temperature=0.0
         )
-
-        # force execution
-        _ = response.choices[0].message.content
-
-        print("[LLM] success", flush=True)
-
+        
+        action_num = int(response.choices[0].message.content.strip())
+        # Ensure valid action
+        if action_num not in [0, 1, 2]:
+            return 2  # FLAG_SUSPICIOUS as fallback
+        return action_num
+        
     except Exception as e:
-        print("[LLM] error:", str(e), flush=True)
-
-
-def get_action(state):
-    try:
-        if state.get("fraud_signal") or state.get("ambiguity", 0) > 0.6:
+        print(f"[LLM ERROR] {e}", flush=True)
+        # Fallback to rule-based logic
+        if fraud_signal or ambiguity > 0.6:
             return Action.FLAG_SUSPICIOUS.value
-
-        if "classroom" not in state.get("location", "").lower():
+        if "classroom" not in location.lower() and "lab" not in location.lower():
             return Action.MARK_ABSENT.value
-
         return Action.MARK_PRESENT.value
-
-    except:
-        return Action.FLAG_SUSPICIOUS.value
-
 
 def run():
     log_start()
-
-    ping_llm()  # 🔥 REQUIRED
-
+    
+    # ✅ Initialize OpenAI client with PROVIDED credentials
+    if not API_BASE_URL or not API_KEY:
+        print("[ERROR] API_BASE_URL and HF_TOKEN/API_KEY must be set", flush=True)
+        log_end(False, 0, 0.0, [])
+        return
+    
+    client = OpenAI(
+        api_key=API_KEY,
+        base_url=API_BASE_URL
+    )
+    
+    # Test the connection (required by validator)
+    try:
+        test_response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": "Say hello"}],
+            max_tokens=5
+        )
+        print("[LLM] success", flush=True)
+    except Exception as e:
+        print(f"[LLM] error: {str(e)}", flush=True)
+        log_end(False, 0, 0.0, [])
+        return
+    
     env = AttendanceEnv()
-
     rewards = []
     steps = 0
     success = False
-
+    
     try:
-        for step, difficulty in enumerate(["easy", "medium", "hard"], start=1):
-
+        for step_num, difficulty in enumerate(["easy", "medium", "hard"], start=1):
             state = env.reset(difficulty)
-            action = get_action(state)
-
+            action = get_llm_action(state, client)
+            
             try:
                 _, reward, done, info = env.step(int(action))
                 error = None
@@ -96,24 +124,26 @@ def run():
                 reward = 0.0
                 done = False
                 error = "step_failed"
-
+            
             rewards.append(reward)
-            steps = step
-
-            log_step(step, action, reward, done, error)
-
+            steps = step_num
+            
+            # Convert action number to string representation
+            action_str = ["MARK_PRESENT", "MARK_ABSENT", "FLAG_SUSPICIOUS"][action]
+            log_step(step_num, action_str, reward, done, error)
+            
             if done:
                 break
-
+        
         score = sum(rewards) / len(rewards) if rewards else 0
         success = score > 0
-
+        
     except Exception as e:
+        print(f"[ERROR] {e}", flush=True)
         score = 0
-
+        
     finally:
         log_end(success, steps, score, rewards)
-
 
 if __name__ == "__main__":
     run()
