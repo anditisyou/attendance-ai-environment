@@ -1,12 +1,15 @@
+"jaaganath"
 import os
-import sys
 from attendance_env import AttendanceEnv, Action
 from openai import OpenAI
 
-# Defaults allowed ONLY for API_BASE_URL and MODEL_NAME
+# ✅ Defaults set ONLY for API_BASE_URL and MODEL_NAME (as required)
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN")  # NO default
+# ✅ NO default for HF_TOKEN (as required)
+HF_TOKEN = os.getenv("HF_TOKEN")
+# Optional - only if using from_docker_image()
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 def log_start():
     print(f"[START] task=attendance env=attendance_env model={MODEL_NAME}", flush=True)
@@ -29,32 +32,24 @@ def log_end(success, steps, score, rewards):
 def run():
     log_start()
     
-    # Check HF_TOKEN first
+    # HF_TOKEN must be provided by validator (no default)
     if not HF_TOKEN:
         print("[ERROR] HF_TOKEN environment variable not set", flush=True)
         log_end(False, 0, 0.0, [])
         return
     
-    # Try to initialize OpenAI client with error handling
-    try:
-        client = OpenAI(
-            base_url=API_BASE_URL,
-            api_key=HF_TOKEN,
-            timeout=30.0,
-            max_retries=2
-        )
-    except Exception as e:
-        print(f"[LLM] Client initialization error: {str(e)}", flush=True)
-        log_end(False, 0, 0.0, [])
-        return
+    # ✅ All LLM calls use OpenAI client configured via these variables
+    client = OpenAI(
+        base_url=API_BASE_URL,
+        api_key=HF_TOKEN
+    )
     
-    # Test LLM connection (required)
+    # Required LLM ping test
     try:
         test_response = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=[{"role": "user", "content": "OK"}],
-            max_tokens=2,
-            timeout=10.0
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=2
         )
         print("[LLM] success", flush=True)
     except Exception as e:
@@ -62,71 +57,37 @@ def run():
         log_end(False, 0, 0.0, [])
         return
     
-    # Initialize environment
-    try:
-        env = AttendanceEnv()
-    except Exception as e:
-        print(f"[ERROR] Environment init error: {str(e)}", flush=True)
-        log_end(False, 0, 0.0, [])
-        return
-    
+    env = AttendanceEnv()
     rewards = []
     steps = 0
     success = False
     
     try:
         for step_num, difficulty in enumerate(["easy", "medium", "hard"], start=1):
-            try:
-                state = env.reset(difficulty)
-            except Exception as e:
-                print(f"[ERROR] Reset failed: {str(e)}", flush=True)
-                break
+            state = env.reset(difficulty)
             
+            # Extract state info
             location = state.get("location", "")
             ambiguity = state.get("ambiguity", 0)
             fraud_signal = state.get("fraud_signal", False)
             student_id = state.get("student_id", "")
             
-            prompt = f"""Student: {student_id}
-Location: {location}
-Ambiguity: {ambiguity}
-Fraud signal: {fraud_signal}
-
-Choose action (0=present, 1=absent, 2=suspicious):"""
+            # ✅ LLM call through their proxy
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": "You are an attendance system. Reply with only 0, 1, or 2."},
+                    {"role": "user", "content": f"Student: {student_id}, Location: {location}, Ambiguity: {ambiguity}, Fraud: {fraud_signal}. Choose: 0=present, 1=absent, 2=suspicious"}
+                ],
+                max_tokens=5,
+                temperature=0.0
+            )
             
-            # Make LLM call with error handling
-            try:
-                response = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[
-                        {"role": "system", "content": "Reply with only 0, 1, or 2"},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=5,
-                    temperature=0.0,
-                    timeout=10.0
-                )
-                action = int(response.choices[0].message.content.strip())
-                if action not in [0, 1, 2]:
-                    action = 2
-            except Exception as e:
-                print(f"[LLM] Step {step_num} error: {str(e)}", flush=True)
-                # Fallback rule-based logic
-                if fraud_signal or ambiguity > 0.6:
-                    action = 2
-                elif "classroom" not in location.lower() and "lab" not in location.lower():
-                    action = 1
-                else:
-                    action = 0
+            action = int(response.choices[0].message.content.strip())
+            if action not in [0, 1, 2]:
+                action = 2
             
-            # Execute action
-            try:
-                _, reward, done, info = env.step(action)
-                error = None
-            except Exception as e:
-                reward = 0.0
-                done = False
-                error = str(e)
+            _, reward, done, _ = env.step(action)
             
             action_map = {0: "MARK_PRESENT", 1: "MARK_ABSENT", 2: "FLAG_SUSPICIOUS"}
             action_str = action_map[action]
@@ -134,7 +95,7 @@ Choose action (0=present, 1=absent, 2=suspicious):"""
             rewards.append(reward)
             steps = step_num
             
-            log_step(step_num, action_str, reward, done, error)
+            log_step(step_num, action_str, reward, done, None)
             
             if done:
                 break
@@ -144,14 +105,11 @@ Choose action (0=present, 1=absent, 2=suspicious):"""
         success = score > 0.5
         
     except Exception as e:
-        print(f"[ERROR] Unexpected: {str(e)}", flush=True)
+        print(f"[ERROR] {str(e)}", flush=True)
         score = 0.0
         success = False
     finally:
-        try:
-            env.close()
-        except:
-            pass
+        env.close()
         log_end(success, steps, score, rewards)
 
 if __name__ == "__main__":
