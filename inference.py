@@ -32,21 +32,24 @@ def log_end(success, steps, score, rewards):
 
 def ping_llm():
     try:
+        api_key = os.environ.get("HF_TOKEN") or os.environ.get("API_KEY")
+        base_url = os.environ.get("API_BASE_URL")
+
         client = OpenAI(
-            api_key=os.environ["API_KEY"],         # 🔥 ORDER FIXED
-            base_url=os.environ["API_BASE_URL"]
+            api_key=api_key,
+            base_url=base_url
         )
 
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": "You are a test agent."},
-                {"role": "user", "content": "Say hello"}
+                {"role": "user", "content": "Say hello clearly"}
             ],
-            max_tokens=5
+            max_tokens=10
         )
 
-        # 🔥 IMPORTANT: access response to ensure execution
+        # force execution
         _ = response.choices[0].message.content
 
         print("[LLM] success", flush=True)
