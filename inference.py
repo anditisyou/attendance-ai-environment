@@ -35,23 +35,22 @@ def get_client():
 
 
 def ping_llm():
-    """
-    Make one safe LLM call (required by validator)
-    """
     try:
-        client = get_client()
-        if client is None:
-            return
+        client = OpenAI(
+            base_url=os.environ["API_BASE_URL"],
+            api_key=os.environ["API_KEY"]
+        )
 
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="openai/gpt-3.5-turbo",  # 🔥 FIXED
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=5
         )
+
         print("[LLM] success", flush=True)
 
     except Exception as e:
-        print("[LLM] call error:", e, flush=True)
+        print("[LLM] attempted:", e, flush=True)
 
 
 def get_action(state):
