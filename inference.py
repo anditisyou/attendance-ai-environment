@@ -5,7 +5,7 @@ from attendance_env import AttendanceEnv, Action
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost")
 MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-3.5-turbo")
 HF_TOKEN = os.getenv("HF_TOKEN")
-
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 # Safe import
 try:
     from openai import OpenAI
