@@ -2,8 +2,14 @@ import os
 from attendance_env import AttendanceEnv, Action
 from openai import OpenAI
 
+# ✅ Defaults allowed ONLY for API_BASE_URL and MODEL_NAME
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+# ❌ NO default for HF_TOKEN - must be provided by validator
+HF_TOKEN = os.getenv("HF_TOKEN")
+
 def log_start():
-    print(f"[START] task=attendance env=attendance_env model={os.getenv('MODEL_NAME')}", flush=True)
+    print(f"[START] task=attendance env=attendance_env model={MODEL_NAME}", flush=True)
 
 def log_step(step, action, reward, done, error):
     error_val = error if error else "null"
@@ -23,42 +29,22 @@ def log_end(success, steps, score, rewards):
 def run():
     log_start()
     
-    # CRITICAL: Get environment variables - NO FALLBACKS, NO ALTERNATIVES
-    api_base = os.getenv("API_BASE_URL")
-    api_key = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-    model_name = os.getenv("MODEL_NAME")
-    
-    # MUST exist - fail if not provided
-    if not api_base:
-        print("[ERROR] API_BASE_URL not set", flush=True)
+    # HF_TOKEN must be provided (no default)
+    if not HF_TOKEN:
+        print("[ERROR] HF_TOKEN environment variable not set", flush=True)
         log_end(False, 0, 0.0, [])
         return
     
-    if not api_key:
-        print("[ERROR] HF_TOKEN or API_KEY not set", flush=True)
-        log_end(False, 0, 0.0, [])
-        return
+    # Initialize OpenAI client with the variables
+    client = OpenAI(
+        base_url=API_BASE_URL,
+        api_key=HF_TOKEN
+    )
     
-    if not model_name:
-        print("[ERROR] MODEL_NAME not set", flush=True)
-        log_end(False, 0, 0.0, [])
-        return
-    
-    # Initialize client with EXACTLY the provided values - NO ALTERNATIVES
-    try:
-        client = OpenAI(
-            api_key=api_key,
-            base_url=api_base  # Use EXACTLY what was provided
-        )
-    except Exception as e:
-        print(f"[LLM] Client init error: {str(e)}", flush=True)
-        log_end(False, 0, 0.0, [])
-        return
-    
-    # REQUIRED: Test LLM connection through THEIR proxy
+    # Required LLM ping test
     try:
         test_response = client.chat.completions.create(
-            model=model_name,  # Use EXACT model name provided
+            model=MODEL_NAME,
             messages=[{"role": "user", "content": "OK"}],
             max_tokens=2
         )
@@ -68,7 +54,6 @@ def run():
         log_end(False, 0, 0.0, [])
         return
     
-    # Initialize environment
     env = AttendanceEnv()
     rewards = []
     steps = 0
@@ -78,7 +63,6 @@ def run():
         for step_num, difficulty in enumerate(["easy", "medium", "hard"], start=1):
             state = env.reset(difficulty)
             
-            # Get action from LLM through THEIR proxy
             location = state.get("location", "")
             ambiguity = state.get("ambiguity", 0)
             fraud_signal = state.get("fraud_signal", False)
@@ -91,30 +75,21 @@ Fraud signal: {fraud_signal}
 
 Choose action (0=present, 1=absent, 2=suspicious):"""
             
-            try:
-                response = client.chat.completions.create(
-                    model=model_name,  # Use EXACT model name
-                    messages=[
-                        {"role": "system", "content": "Reply with only 0, 1, or 2"},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=5,
-                    temperature=0.0
-                )
-                action = int(response.choices[0].message.content.strip())
-                if action not in [0, 1, 2]:
-                    action = 2
-            except Exception as e:
-                # Fallback only if LLM call fails
-                print(f"[LLM] Step {step_num} error: {str(e)}", flush=True)
-                if fraud_signal or ambiguity > 0.6:
-                    action = 2
-                elif "classroom" not in location.lower() and "lab" not in location.lower():
-                    action = 1
-                else:
-                    action = 0
+            # Make LLM call
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": "Reply with only 0, 1, or 2"},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=5,
+                temperature=0.0
+            )
             
-            # Execute action
+            action = int(response.choices[0].message.content.strip())
+            if action not in [0, 1, 2]:
+                action = 2
+            
             _, reward, done, info = env.step(action)
             
             action_map = {0: "MARK_PRESENT", 1: "MARK_ABSENT", 2: "FLAG_SUSPICIOUS"}
