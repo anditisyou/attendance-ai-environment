@@ -33,18 +33,26 @@ def log_end(success, steps, score, rewards):
 def ping_llm():
     try:
         client = OpenAI(
-            base_url=os.environ["API_BASE_URL"],
-            api_key=os.environ["API_KEY"]
+            api_key=os.environ["API_KEY"],         # 🔥 ORDER FIXED
+            base_url=os.environ["API_BASE_URL"]
         )
 
-        client.chat.completions.create(
+        response = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=[{"role": "user", "content": "ping"}],
+            messages=[
+                {"role": "system", "content": "You are a test agent."},
+                {"role": "user", "content": "Say hello"}
+            ],
             max_tokens=5
         )
 
-    except Exception:
-        pass  # still counts
+        # 🔥 IMPORTANT: access response to ensure execution
+        _ = response.choices[0].message.content
+
+        print("[LLM] success", flush=True)
+
+    except Exception as e:
+        print("[LLM] error:", str(e), flush=True)
 
 
 def get_action(state):
