@@ -5,7 +5,7 @@ from openai import OpenAI
 # ✅ STRICT: Use only injected environment variables
 API_BASE_URL = os.environ["API_BASE_URL"]
 API_KEY = os.environ["API_KEY"]
-MODEL_NAME = os.environ["MODEL_NAME"]  # no fallback
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
 
 # ---------------- LOGGING ---------------- #
 
