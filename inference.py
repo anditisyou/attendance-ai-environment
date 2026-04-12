@@ -5,8 +5,7 @@ from openai import OpenAI
 # ✅ Correct env handling (as per validator template)
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-MODEL_NAME   = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-
+MODEL_NAME   = os.getenv("MODEL_NAME", "gpt-3.5-turbo") or "Qwen/Qwen2.5-72B-Instruct" 
 TASK_NAME = "attendance"
 BENCHMARK = "attendance_env"
 
